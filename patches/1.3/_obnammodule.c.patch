@@ -1,0 +1,29 @@
+79c79
+<     struct timespec tv[2];
+---
+>     struct timespec ts[2];
+89,94c89,101
+<     tv[0].tv_sec = atime_sec;
+<     tv[0].tv_nsec = atime_nsec;
+<     tv[1].tv_sec = mtime_sec;
+<     tv[1].tv_nsec = mtime_nsec;
+<     ret = utimensat(AT_FDCWD, filename, tv, AT_SYMLINK_NOFOLLOW);
+<     if (ret == -1)
+---
+>     ts[0].tv_sec = atime_sec;
+>     ts[0].tv_nsec = atime_nsec;
+>     ts[1].tv_sec = mtime_sec;
+>     ts[1].tv_nsec = mtime_nsec;
+> #ifdef OBNAM_WITH_UTIMENSAT
+>     ret = utimensat(AT_FDCWD, filename, ts, AT_SYMLINK_NOFOLLOW);
+> #else
+>     struct timeval tv[2];
+>     TIMESPEC_TO_TIMEVAL(&tv[0], &ts[0]);
+>     TIMESPEC_TO_TIMEVAL(&tv[1], &ts[1]);
+>     ret = utimes(filename, tv);
+> #endif
+>     if (ret == -1);
+180c187
+<         if (n >= 0)
+---
+>         if (n > 0)
