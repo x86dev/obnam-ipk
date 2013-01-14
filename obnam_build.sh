@@ -196,8 +196,6 @@ ${MKDIR} -p ${SCRIPT_DIR_OBNAM} || exit 1
 ${MKDIR} -p ${SCRIPT_DIR_IPKG_CONTROL} || exit 1
 ${MKDIR} -p ${SCRIPT_DIR_OUT} || exit 1
 
-set -xv
-
 if [ "$SCRIPT_CMD" = "install" -a -n "$SCRIPT_CFG_OBNAM_DEPS" ]; then
     echo "Installing dependencies ..."
     for CUR_FILE in ${OBNAM_LIW_DEPS}; do
