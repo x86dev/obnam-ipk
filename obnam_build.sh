@@ -71,6 +71,7 @@ show_help()
     echo "Usage: $0 [--help|-h|-?]"
     echo "       build | install"
     echo "       [--obnam-version <VERSION>] [--obnam-deps]"
+    echo "       [--no-cleanup] [--no-patching]"
     echo ""
     exit 1
 }
@@ -117,6 +118,12 @@ while [ $# != 0 ]; do
         --obnam-deps)
             SCRIPT_CFG_OBNAM_DEPS="1"
             ;;
+        --no-cleanup)
+            SCRIPT_CFG_NO_CLEANUP="1"
+            ;;
+        --no-patching)
+            SCRIPT_CFG_NO_PATCHING="1"
+            ;;
         ## @todo Add RPM support (--pkg-format=rpm).
         ## @todo Add proxy support.
         *)
@@ -137,6 +144,7 @@ SCRIPT_DIR_IPKG=${SCRIPT_DIR_STAGING}/ipkg
 SCRIPT_DIR_IPKG_CONTROL=${SCRIPT_DIR_IPKG}/CONTROL
 SCRIPT_DIR_OUT=${SCRIPT_DIR_BASE}/out
 SCRIPT_DIR_PATCHES=${SCRIPT_DIR_BASE}/patches
+SCRIPT_DIR_IPK=${SCRIPT_DIR_BASE}/ipk
 
 if [ "$SCRIPT_CFG_OBNAM_VER" = "newest" ]; then
     SCRIPT_CFG_OBNAM_VER="1.3"
@@ -219,12 +227,16 @@ SCRIPT_DIR_OBNAM=$(dirname $OBNAM_FILE_SETUP) || exit 1
 #
 # Apply patches.
 #
-echo "Applying patches ..."
-SCRIPT_PATCHES=$(find "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" -name "*.patch") || exit 1
-for CUR_PATCH in "$SCRIPT_PATCHES"; do
-    CUR_FILE="$SCRIPT_DIR_OBNAM/$(basename $CUR_PATCH .patch)"
-    ${PATCH} "$CUR_FILE" "$CUR_PATCH" || exit 1
-done
+if [ -z "$SCRIPT_CFG_NO_PATCHING" ]; then
+    echo "Applying patches ..."
+    SCRIPT_PATCHES=$(find "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" -name "*.patch") || exit 1
+    for CUR_PATCH in "$SCRIPT_PATCHES"; do
+        CUR_FILE="$SCRIPT_DIR_OBNAM/$(basename $CUR_PATCH .patch)"
+        ${PATCH} "$CUR_FILE" "$CUR_PATCH" || exit 1
+    done
+else
+    echo "Patching skipped"
+fi
 
 #
 # Build Obnam.
@@ -246,8 +258,7 @@ ${TAR} -C "$SCRIPT_DIR_OBNAM_DIST" -czf "$IPKG_FILE_DATA" . || exit 1
 
 echo "Obnam version: $SCRIPT_CFG_OBNAM_VER"
 
-${CAT} > "$SCRIPT_DIR_IPKG_CONTROL/control" <<EOF
-Package: obnam
+IPKG_FLE_CONTROL_CONTENT="Package: obnam
 Source: http://code.liw.fi/debian/pool/main/o/obnam/
 Priority: optional
 Section: python
@@ -275,7 +286,10 @@ Description: online and disk-based backup application
 
  Obnam was developed by Lars Wirzenius (http://liw.fi/)
 Suggests:
-Conflicts:
+Conflicts:"
+
+${CAT} > "$SCRIPT_DIR_IPKG_CONTROL/control" <<EOF
+$IPKG_FLE_CONTROL_CONTENT
 EOF
 
 # Create conffiles (not used yet).
@@ -294,7 +308,11 @@ ${TAR} -C "$SCRIPT_DIR_IPKG" -czf "$IPKG_OUTPUT" \
     $(basename $IPKG_FILE_CONTROL) \
     || exit 1
 
-${RM} -rf "$SCRIPT_DIR_STAGING" || exit 1
+if [ -z "$SCRIPT_CFG_NO_CLEANUP" ]; then
+    ${RM} -rf "$SCRIPT_DIR_STAGING" || exit 1
+else
+    echo "Skipping cleanup"
+fi
 
 echo "IPK package created: $IPKG_OUTPUT"
 exit 0
