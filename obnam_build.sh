@@ -147,10 +147,23 @@ SCRIPT_DIR_PATCHES=${SCRIPT_DIR_BASE}/patches
 SCRIPT_DIR_IPK=${SCRIPT_DIR_BASE}/ipk
 
 if [ "$SCRIPT_CFG_OBNAM_VER" = "newest" ]; then
-    SCRIPT_CFG_OBNAM_VER="1.3"
+    SCRIPT_CFG_OBNAM_VER="1.4"
 fi
 
 case "$SCRIPT_CFG_OBNAM_VER" in
+    1.4)
+        OBNAM_LIW_DEPS="\
+            http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20130313.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-tracing/python-tracing_0.7.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-larch/python-larch_1.20130316.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-ttystatus/python-ttystatus_0.22.orig.tar.gz"
+
+        OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.4.orig.tar.gz"
+
+        OBNAM_EXT_DEPS="\
+            http://www.lag.net/paramiko/download/paramiko-1.7.7.1.zip \
+            http://ftp.dlitz.net/pub/dlitz/crypto/pycrypto/pycrypto-2.6.tar.gz"
+        ;;
     1.3)
         OBNAM_LIW_DEPS="\
             http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20120630.orig.tar.gz \
@@ -228,12 +241,16 @@ SCRIPT_DIR_OBNAM=$(dirname $OBNAM_FILE_SETUP) || exit 1
 # Apply patches.
 #
 if [ -z "$SCRIPT_CFG_NO_PATCHING" ]; then
-    echo "Applying patches ..."
-    SCRIPT_PATCHES=$(find "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" -name "*.patch") || exit 1
-    for CUR_PATCH in "$SCRIPT_PATCHES"; do
-        CUR_FILE="$SCRIPT_DIR_OBNAM/$(basename $CUR_PATCH .patch)"
-        ${PATCH} "$CUR_FILE" "$CUR_PATCH" || exit 1
-    done
+    if [ -d "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" ]; then
+        echo "Applying patches ..."
+        SCRIPT_PATCHES=$(find "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" -name "*.patch") || exit 1
+        for CUR_PATCH in "$SCRIPT_PATCHES"; do
+            CUR_FILE="$SCRIPT_DIR_OBNAM/$(basename $CUR_PATCH .patch)"
+            ${PATCH} "$CUR_FILE" "$CUR_PATCH" || exit 1
+        done
+    else
+        echo "No patches for Obnam $SCRIPT_CFG_OBNAM_VER found, skipping ..."
+    fi
 else
     echo "Patching skipped"
 fi
