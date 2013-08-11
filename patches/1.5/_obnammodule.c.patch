@@ -1,0 +1,17 @@
+--- _obnammodule.c.org	2013-01-25 21:19:55.000000000 +0100
++++ _obnammodule.c	2013-01-25 21:19:33.000000000 +0100
+@@ -90,7 +90,14 @@
+     tv[0].tv_nsec = atime_nsec;
+     tv[1].tv_sec = mtime_sec;
+     tv[1].tv_nsec = mtime_nsec;
++#ifdef OBNAM_WITH_UTIMENSAT
+     ret = utimensat(AT_FDCWD, filename, tv, AT_SYMLINK_NOFOLLOW);
++#else
++    struct timeval tval[2];
++    TIMESPEC_TO_TIMEVAL(&tval[0], &tv[0]);
++    TIMESPEC_TO_TIMEVAL(&tval[1], &tv[1]);
++    ret = utimes(filename, tval);
++#endif
+     if (ret == -1)
+         ret = errno;
+     return Py_BuildValue("i", ret);

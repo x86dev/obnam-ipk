@@ -147,10 +147,23 @@ SCRIPT_DIR_PATCHES=${SCRIPT_DIR_BASE}/patches
 SCRIPT_DIR_IPK=${SCRIPT_DIR_BASE}/ipk
 
 if [ "$SCRIPT_CFG_OBNAM_VER" = "newest" ]; then
-    SCRIPT_CFG_OBNAM_VER="1.4"
+    SCRIPT_CFG_OBNAM_VER="1.5"
 fi
 
 case "$SCRIPT_CFG_OBNAM_VER" in
+    1.5)
+        OBNAM_LIW_DEPS="\
+            http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20130808.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-tracing/python-tracing_0.8.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-larch/python-larch_1.20130808.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-ttystatus/python-ttystatus_0.23.orig.tar.gz"
+
+        OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.5.orig.tar.gz"
+
+        OBNAM_EXT_DEPS="\
+	    https://pypi.python.org/packages/source/p/paramiko/paramiko-1.11.0.tar.gz#md5=a2c55dc04904bd08d984533703177084 
+            https://pypi.python.org/packages/source/p/pycrypto/pycrypto-2.6.tar.gz#md5=88dad0a270d1fe83a39e0467a66a22bb"
+        ;;
     1.4)
         OBNAM_LIW_DEPS="\
             http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20130313.orig.tar.gz \
