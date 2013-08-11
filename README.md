@@ -27,4 +27,4 @@ Usage
 =====
 
 For script usage, see the command line help with "--help". Tested
-on x86_64 (Debian) and Synology DSM 4.1 with Optware installed.
+on x86_64 (Debian) and Synology DSM 4.2 with Optware installed.
