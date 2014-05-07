@@ -1,6 +1,6 @@
 #/bin/sh -e
 
-# Copyright 2013 by x86dev.
+# Copyright 2013-2014 by x86dev.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,7 +15,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR_BASE=.
+SCRIPT_DIR_BASE=$(readlink -f $0 | xargs dirname)
+
+# Enable for debugging.
+#set -x
 
 SCIPRT_ARCH_MACHINE=`uname -m`
 if [ -z "$SCIPRT_ARCH_MACHINE" ]; then
@@ -69,7 +72,7 @@ show_help()
     echo "are supported. Feedback welcome!"
     echo ""
     echo "Usage: $0 [--help|-h|-?]"
-    echo "       build | install"
+    echo "       build | install | uninstall"
     echo "       [--obnam-version <VERSION>] [--obnam-deps]"
     echo "       [--no-cleanup] [--no-patching]"
     echo ""
@@ -86,10 +89,17 @@ SCRIPT_CMD="$1"
 shift
 case "$SCRIPT_CMD" in
     build)
+        # Building can be performed by regular users.
         ;;
     install)
         if [ "$(id -u)" != "0" ]; then
             echo "Installation only can be done as root - aborting" 1>&2
+            exit 2
+        fi
+        ;;
+    uninstall)
+        if [ "$(id -u)" != "0" ]; then
+            echo "Uninstallation only can be done as root - aborting" 1>&2
             exit 2
         fi
         ;;
@@ -134,9 +144,6 @@ while [ $# != 0 ]; do
     esac
 done
 
-echo "Building Obnam $SCRIPT_CFG_OBNAM_VER"
-echo "Architecture: $SCRIPT_ARCH ($SCIPRT_ARCH_MACHINE)"
-
 SCRIPT_DIR_STAGING=${SCRIPT_DIR_BASE}/staging
 SCRIPT_DIR_DEPS=${SCRIPT_DIR_STAGING}/deps
 SCRIPT_DIR_OBNAM=${SCRIPT_DIR_STAGING}/obnam
@@ -146,11 +153,39 @@ SCRIPT_DIR_OUT=${SCRIPT_DIR_BASE}/out
 SCRIPT_DIR_PATCHES=${SCRIPT_DIR_BASE}/patches
 SCRIPT_DIR_IPK=${SCRIPT_DIR_BASE}/ipk
 
+SCRIPT_FILE_INSTALLED=${SCRIPT_DIR_OUT}/installed_files.txt
+
 if [ "$SCRIPT_CFG_OBNAM_VER" = "newest" ]; then
-    SCRIPT_CFG_OBNAM_VER="1.5"
+    SCRIPT_CFG_OBNAM_VER="1.7"
 fi
 
 case "$SCRIPT_CFG_OBNAM_VER" in
+    1.7)
+        OBNAM_LIW_DEPS="\
+            http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20140315.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-tracing/python-tracing_0.8.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-larch/python-larch_1.20131130.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-ttystatus/python-ttystatus_0.23.orig.tar.gz"
+
+        OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.7.orig.tar.gz"
+
+        OBNAM_EXT_DEPS="\
+            https://pypi.python.org/packages/source/p/paramiko/paramiko-1.13.0.tar.gz \
+            https://pypi.python.org/packages/source/p/pycrypto/pycrypto-2.6.1.tar.gz"
+        ;;
+    1.6)
+        OBNAM_LIW_DEPS="\
+            http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20130808.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-tracing/python-tracing_0.8.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-larch/python-larch_1.20131130.orig.tar.gz \
+            http://code.liw.fi/debian/pool/main/p/python-ttystatus/python-ttystatus_0.23.orig.tar.gz"
+
+        OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.6.1.orig.tar.gz"
+
+        OBNAM_EXT_DEPS="\
+            https://pypi.python.org/packages/source/p/paramiko/paramiko-1.12.2.tar.gz \
+            https://pypi.python.org/packages/source/p/pycrypto/pycrypto-2.6.1.tar.gz"
+        ;;
     1.5)
         OBNAM_LIW_DEPS="\
             http://code.liw.fi/debian/pool/main/p/python-cliapp/python-cliapp_1.20130808.orig.tar.gz \
@@ -161,7 +196,7 @@ case "$SCRIPT_CFG_OBNAM_VER" in
         OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.5.orig.tar.gz"
 
         OBNAM_EXT_DEPS="\
-	    https://pypi.python.org/packages/source/p/paramiko/paramiko-1.11.0.tar.gz#md5=a2c55dc04904bd08d984533703177084 
+            https://pypi.python.org/packages/source/p/paramiko/paramiko-1.11.0.tar.gz#md5=a2c55dc04904bd08d984533703177084 \
             https://pypi.python.org/packages/source/p/pycrypto/pycrypto-2.6.tar.gz#md5=88dad0a270d1fe83a39e0467a66a22bb"
         ;;
     1.4)
@@ -216,79 +251,97 @@ obnam_get_deps()
     esac
 
     for CUR_SETUP in $(find $SCRIPT_DIR_DEPS -name setup.py); do
-        CUR_DIR="$PWD"
-        cd $(dirname ${CUR_SETUP})
-        ${PYTHON} $(basename $CUR_SETUP) install || exit 1
-        cd "$CUR_DIR"
+        CUR_OLD_PWD="$PWD"
+        CUR_SETUP_DIR=$(dirname $CUR_SETUP)
+        CUR_SETUP_FILE=$(basename $CUR_SETUP)
+        CUR_SETUP_FILE_LIST=${CUR_SETUP_DIR}/files.txt
+        cd "$CUR_SETUP_DIR"
+        ${PYTHON} ${CUR_SETUP_FILE} install --record ${CUR_SETUP_FILE_LIST} || exit 1
+        cat ${CUR_SETUP_FILE_LIST} >> ${SCRIPT_FILE_INSTALLED}
+        cd "$CUR_OLD_PWD"
     done
 }
 
-## @todo Install cleanup trap handler.
+obnam_build()
+{
+    echo "Building Obnam $SCRIPT_CFG_OBNAM_VER"
+    echo "Architecture: $SCRIPT_ARCH ($SCIPRT_ARCH_MACHINE)"
 
-${MKDIR} -p ${SCRIPT_DIR_DEPS} || exit 1
-${MKDIR} -p ${SCRIPT_DIR_OBNAM} || exit 1
-${MKDIR} -p ${SCRIPT_DIR_IPKG_CONTROL} || exit 1
-${MKDIR} -p ${SCRIPT_DIR_OUT} || exit 1
+    ${MKDIR} -p ${SCRIPT_DIR_DEPS} || exit 1
+    ${MKDIR} -p ${SCRIPT_DIR_OBNAM} || exit 1
+    ${MKDIR} -p ${SCRIPT_DIR_IPKG_CONTROL} || exit 1
+    ${MKDIR} -p ${SCRIPT_DIR_OUT} || exit 1
 
-if [ "$SCRIPT_CMD" = "install" -a -n "$SCRIPT_CFG_OBNAM_DEPS" ]; then
-    echo "Installing dependencies ..."
-    for CUR_FILE in ${OBNAM_LIW_DEPS}; do
-        obnam_get_deps "$CUR_FILE"
-    done
-
-    echo "Installing external dependencies ..."
-    for CUR_FILE in ${OBNAM_EXT_DEPS}; do
-        obnam_get_deps "$CUR_FILE"
-    done
-fi
-
-#
-# Get Obnam.
-#
-${WGET} "$OBNAM_LIW_SRC" -O "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
-${TAR} -C "$SCRIPT_DIR_OBNAM" -xvf "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
-OBNAM_FILE_SETUP=$(find $SCRIPT_DIR_OBNAM -name setup.py | head -n 1) || exit 1
-SCRIPT_DIR_OBNAM=$(dirname $OBNAM_FILE_SETUP) || exit 1
-
-#
-# Apply patches.
-#
-if [ -z "$SCRIPT_CFG_NO_PATCHING" ]; then
-    if [ -d "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" ]; then
-        echo "Applying patches ..."
-        SCRIPT_PATCHES=$(find "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" -name "*.patch") || exit 1
-        for CUR_PATCH in "$SCRIPT_PATCHES"; do
-            CUR_FILE="$SCRIPT_DIR_OBNAM/$(basename $CUR_PATCH .patch)"
-            ${PATCH} "$CUR_FILE" "$CUR_PATCH" || exit 1
+    if [ "$SCRIPT_CMD" = "install" -a -n "$SCRIPT_CFG_OBNAM_DEPS" ]; then
+        
+        # Remove old file list.
+        rm ${SCRIPT_FILE_INSTALLED}
+        
+        echo "Installing dependencies ..."
+        for CUR_FILE in ${OBNAM_LIW_DEPS}; do
+            obnam_get_deps "$CUR_FILE"
         done
-    else
-        echo "No patches for Obnam $SCRIPT_CFG_OBNAM_VER found, skipping ..."
+
+        echo "Installing external dependencies ..."
+        for CUR_FILE in ${OBNAM_EXT_DEPS}; do
+            obnam_get_deps "$CUR_FILE"
+        done
     fi
-else
-    echo "Patching skipped"
-fi
 
-#
-# Build Obnam.
-#
-echo "Building Obnam ..."
+    #
+    # Get Obnam.
+    #
+    ${WGET} "$OBNAM_LIW_SRC" -O "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
+    ${TAR} -C "$SCRIPT_DIR_OBNAM" -xvf "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
+    OBNAM_FILE_SETUP=$(find $SCRIPT_DIR_OBNAM -name setup.py | head -n 1) || exit 1
+    SCRIPT_DIR_OBNAM=$(dirname $OBNAM_FILE_SETUP) || exit 1
 
-CUR_DIR="$PWD"
-cd "$SCRIPT_DIR_OBNAM"
-${PYTHON} setup.py bdist_dumb --keep-temp --bdist-dir "dist" --format=tar || exit 1
-cd "$CUR_DIR"
+    #
+    # Install pYAML -- not needed with Obnam 1.7+ anymore.
+    #
+    obnam_get_deps "https://pypi.python.org/packages/source/p/pyaml/pyaml-14.05.2.tar.gz"
 
-#
-# Build .ipk file.
-#
-SCRIPT_DIR_OBNAM_DIST=${SCRIPT_DIR_OBNAM}/dist
-${RM} ${SCRIPT_DIR_OBNAM_DIST}/*.tar  || exit 1
-IPKG_FILE_DATA="$SCRIPT_DIR_IPKG/data.tar.gz"
-${TAR} -C "$SCRIPT_DIR_OBNAM_DIST" -czf "$IPKG_FILE_DATA" . || exit 1
+    #
+    # Apply patches.
+    #
+    if [ -z "$SCRIPT_CFG_NO_PATCHING" ]; then
+        if [ -d "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" ]; then
+            echo "Applying patches ..."
+            SCRIPT_PATCHES=$(find "$SCRIPT_DIR_PATCHES/$SCRIPT_CFG_OBNAM_VER" -name "*.patch") || exit 1
+            for CUR_PATCH in "$SCRIPT_PATCHES"; do
+                CUR_FILE="$SCRIPT_DIR_OBNAM/$(basename $CUR_PATCH .patch)"
+                ${PATCH} "$CUR_FILE" "$CUR_PATCH" || exit 1
+            done
+        else
+            echo "No patches for Obnam $SCRIPT_CFG_OBNAM_VER found, skipping ..."
+        fi
+    else
+        echo "Patching skipped"
+    fi
 
-echo "Obnam version: $SCRIPT_CFG_OBNAM_VER"
+    #
+    # Build Obnam.
+    #
+    echo "Building Obnam ..."
 
-IPKG_FLE_CONTROL_CONTENT="Package: obnam
+    CUR_DIR="$PWD"
+    cd "$SCRIPT_DIR_OBNAM"
+    CUR_SETUP_FILE_LIST=${SCRIPT_DIR_OBNAM}/file.txt
+    ${PYTHON} setup.py bdist_dumb --keep-temp --bdist-dir "dist" --format=tar || exit 1
+    cat ${CUR_SETUP_FILE_LIST} >> ${SCRIPT_FILE_INSTALLED}
+    cd "$CUR_DIR"
+
+    #
+    # Build .ipk file.
+    #
+    SCRIPT_DIR_OBNAM_DIST=${SCRIPT_DIR_OBNAM}/dist
+    ${RM} ${SCRIPT_DIR_OBNAM_DIST}/*.tar  || exit 1
+    IPKG_FILE_DATA="$SCRIPT_DIR_IPKG/data.tar.gz"
+    ${TAR} -C "$SCRIPT_DIR_OBNAM_DIST" -czf "$IPKG_FILE_DATA" . || exit 1
+
+    echo "Obnam version: $SCRIPT_CFG_OBNAM_VER"
+
+    IPKG_FLE_CONTROL_CONTENT="Package: obnam
 Source: http://code.liw.fi/debian/pool/main/o/obnam/
 Priority: optional
 Section: python
@@ -318,32 +371,52 @@ Description: online and disk-based backup application
 Suggests:
 Conflicts:"
 
-${CAT} > "$SCRIPT_DIR_IPKG_CONTROL/control" <<EOF
+    ${CAT} > "$SCRIPT_DIR_IPKG_CONTROL/control" <<EOF
 $IPKG_FLE_CONTROL_CONTENT
 EOF
 
-# Create conffiles (not used yet).
-IPKG_FILE_CONFFILES="$SCRIPT_DIR_IPKG_CONTROL/conffiles"
-echo "" > "$IPKG_FILE_CONFFILES" || exit 1
+    # Create conffiles (not used yet).
+    IPKG_FILE_CONFFILES="$SCRIPT_DIR_IPKG_CONTROL/conffiles"
+    echo "" > "$IPKG_FILE_CONFFILES" || exit 1
 
-IPKG_FILE_CONTROL="$SCRIPT_DIR_IPKG/control.tar.gz"
-${TAR} -C "$SCRIPT_DIR_IPKG_CONTROL" -czf "$IPKG_FILE_CONTROL" . || exit 1
+    IPKG_FILE_CONTROL="$SCRIPT_DIR_IPKG/control.tar.gz"
+    ${TAR} -C "$SCRIPT_DIR_IPKG_CONTROL" -czf "$IPKG_FILE_CONTROL" . || exit 1
 
-IPKG_FILE_DEBIAN_BINARY="$SCRIPT_DIR_IPKG/debian-binary"
-echo "2.0" > "$IPKG_FILE_DEBIAN_BINARY" || exit 1
+    IPKG_FILE_DEBIAN_BINARY="$SCRIPT_DIR_IPKG/debian-binary"
+    echo "2.0" > "$IPKG_FILE_DEBIAN_BINARY" || exit 1
 
-IPKG_OUTPUT="$SCRIPT_DIR_OUT/obnam-$SCRIPT_CFG_OBNAM_VER-$SCIPRT_ARCH_MACHINE.ipk"
-${TAR} -C "$SCRIPT_DIR_IPKG" -czf "$IPKG_OUTPUT" \
-    $(basename $IPKG_FILE_DEBIAN_BINARY) $(basename $IPKG_FILE_DATA) \
-    $(basename $IPKG_FILE_CONTROL) \
-    || exit 1
+    IPKG_OUTPUT="$SCRIPT_DIR_OUT/obnam-$SCRIPT_CFG_OBNAM_VER-$SCIPRT_ARCH_MACHINE.ipk"
+    ${TAR} -C "$SCRIPT_DIR_IPKG" -czf "$IPKG_OUTPUT" \
+        $(basename $IPKG_FILE_DEBIAN_BINARY) $(basename $IPKG_FILE_DATA) \
+        $(basename $IPKG_FILE_CONTROL) \
+        || exit 1
 
-if [ -z "$SCRIPT_CFG_NO_CLEANUP" ]; then
-    ${RM} -rf "$SCRIPT_DIR_STAGING" || exit 1
-else
-    echo "Skipping cleanup"
-fi
+    if [ -z "$SCRIPT_CFG_NO_CLEANUP" ]; then
+        ${RM} -rf "$SCRIPT_DIR_STAGING" || exit 1
+    else
+        echo "Skipping cleanup"
+    fi
 
-echo "IPK package created: $IPKG_OUTPUT"
-exit 0
+    echo "IPK package created: $IPKG_OUTPUT"
+    return 0
+}
 
+obnam_remove()
+{
+    echo "Removing Obnam ..."
+    CUR_FILE_LIST=${SCRIPT_FILE_INSTALLED}
+    cat ${CUR_FILE_LIST} # | xargs rm -rf
+}
+
+## @todo Install cleanup trap handler.
+
+case "$SCRIPT_CMD" in
+    build|install)
+        obnam_build
+        ;;
+    uninstall)
+        obnam_remove
+        ;;
+    *)
+        ;;
+esac
