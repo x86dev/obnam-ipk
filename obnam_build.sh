@@ -168,7 +168,7 @@ case "$SCRIPT_CFG_OBNAM_VER" in
             http://code.liw.fi/debian/pool/main/p/python-larch/python-larch_1.20131130.orig.tar.gz \
             http://code.liw.fi/debian/pool/main/p/python-ttystatus/python-ttystatus_0.23.orig.tar.gz"
 
-        OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.7.orig.tar.gz"
+        OBNAM_LIW_SRC="http://code.liw.fi/debian/pool/main/o/obnam/obnam_1.7.4.orig.tar.gz"
 
         OBNAM_EXT_DEPS="\
             https://pypi.python.org/packages/source/p/paramiko/paramiko-1.13.0.tar.gz \
