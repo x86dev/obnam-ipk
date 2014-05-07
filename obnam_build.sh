@@ -49,7 +49,8 @@ if [ "$SCRIPT_ARCH" = "arm" ]; then # e.g. Synology w/ Optware installed
     RM=/bin/rm
     TAR=/bin/tar
     UNZIP=/opt/bin/unzip
-    WGET=/opt/bin/wget
+    WGET=/usr/syno/bin/wget # wget in Optware does not support SSL.
+    WGET_PARMS=--no-check-certificate
 else # Linux, e.g. Debian
     CAT=/bin/cat
     MKDIR=/bin/mkdir
@@ -237,7 +238,7 @@ obnam_get_deps()
     PKG_BASENAME=$(basename ${PKG_URL})
     PKG_EXT=$(echo $PKG_BASENAME | awk -F . '{print $NF}')
 
-    ${WGET} "$PKG_URL" -O "$SCRIPT_DIR_DEPS/$PKG_BASENAME" || exit 1
+    ${WGET} ${WGET_PARMS} "$PKG_URL" -O "$SCRIPT_DIR_DEPS/$PKG_BASENAME" || exit 1
     case "$PKG_EXT" in
         gz)
             ${TAR} xvf "$SCRIPT_DIR_DEPS/$PKG_BASENAME" -C "$SCRIPT_DIR_DEPS" || exit 1
@@ -291,7 +292,7 @@ obnam_build()
     #
     # Get Obnam.
     #
-    ${WGET} "$OBNAM_LIW_SRC" -O "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
+    ${WGET} ${WGET_PARMS} "$OBNAM_LIW_SRC" -O "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
     ${TAR} -C "$SCRIPT_DIR_OBNAM" -xvf "$SCRIPT_DIR_OBNAM/$(basename $OBNAM_LIW_SRC)" || exit 1
     OBNAM_FILE_SETUP=$(find $SCRIPT_DIR_OBNAM -name setup.py | head -n 1) || exit 1
     SCRIPT_DIR_OBNAM=$(dirname $OBNAM_FILE_SETUP) || exit 1
